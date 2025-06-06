@@ -3,8 +3,8 @@ version: '3.8'
 services:
   crm:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: src/crm/Dockerfile
     ports:
       - "8000:8000"
     volumes:
@@ -13,6 +13,7 @@ services:
       - DATABASE_URL=/app/data/crm.db
       - HOST=0.0.0.0
       - PORT=8000
+      - PYTHONPATH=/app
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s

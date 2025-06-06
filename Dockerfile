@@ -1,5 +1,5 @@
-# Use Python 3.13 slim image as base
-FROM python:3.13-slim
+# Use Python 3.9 slim image as base
+FROM python:3.9-slim
 
 # Set working directory
 WORKDIR /app
@@ -24,7 +24,8 @@ RUN mkdir -p /app/data
 COPY requirements.txt .
 
 # Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir email-validator>=2.0.0
 
 # Copy application code
 COPY . .
@@ -40,4 +41,4 @@ USER appuser
 EXPOSE 8000
 
 # Run the application
-CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"] 
+CMD ["uvicorn", "src.crm.api:app", "--host", "0.0.0.0", "--port", "8000"] 

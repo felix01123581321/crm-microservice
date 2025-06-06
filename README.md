@@ -5,67 +5,91 @@ A lightweight CRM (Customer Relationship Management) microservice that provides 
 ## Features
 
 - Lead Management (create, read, update, delete)
+  - Mandatory status field with default value "new"
+  - Status cannot be set to null
+  - URL tracking and filtering
+  - Email validation and formatting
+  - Duplicate email prevention (case-insensitive)
 - Action Tracking (create, read, update, delete)
-- Process Management (create, read, update, delete)
+  - Automatic timestamp tracking
+  - Automatic process management
+  - Compatible with both 'description' and 'details' fields
+- Process Management (read, update, delete)
+  - Automatically created and updated based on actions
+  - 7-day follow-up window from last action
+  - Status tracking and channel management
 - RESTful API endpoints
 - SQLite database with thread-safe operations
 - Docker containerization
+- Debug logging for database operations
 
 ## API Endpoints
 
 ### Leads
 
-- `POST /leads` - Create a new lead
+- `POST /leads/` - Create a new lead
+  - Status defaults to "new" if not provided
+  - Status cannot be null
+  - Email must be valid and will be converted to lowercase
+  - Duplicate emails (case-insensitive) are not allowed
 - `GET /leads/{lead_id}` - Get lead details
 - `PUT /leads/{lead_id}` - Update lead information
+  - Status cannot be set to null
+  - Email must be valid and will be converted to lowercase
+  - Cannot update to an email that already exists (case-insensitive)
 - `DELETE /leads/{lead_id}` - Delete a lead
+- `GET /leads/` - Search leads (optional filters: status, url)
 
 ### Actions
 
-- `POST /actions` - Create a new action
+- `POST /actions/` - Create a new action
+  - Automatically sets timestamp if not provided
+  - Creates or updates associated process
+  - Sets next follow-up to 7 days after action
+  - Accepts both 'description' and 'details' fields
 - `GET /actions/{action_id}` - Get action details
-- `PUT /actions/{action_id}` - Update action information
-- `DELETE /actions/{action_id}` - Delete an action
+- `GET /actions/` - Search actions (optional filter: action_type)
 
 ### Processes
 
-- `POST /processes` - Create a new process
 - `GET /processes/{process_id}` - Get process details
-- `PUT /processes/{process_id}` - Update process information
-- `DELETE /processes/{process_id}` - Delete a process
+- `GET /processes/` - Search processes (optional filter: status)
+- `POST /processes/` - Create a new process (only available in test environment via create_app_with_db())
 
 ## Database Schema
 
 ### Leads Table
 ```sql
 CREATE TABLE leads (
-    id INTEGER PRIMARY KEY,
-    email TEXT NOT NULL,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT,
-    status TEXT DEFAULT 'new',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    email TEXT,
+    status TEXT NOT NULL DEFAULT 'new',
+    url TEXT
 )
 ```
 
 ### Actions Table
 ```sql
 CREATE TABLE actions (
-    id INTEGER PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     lead_id INTEGER,
-    action_type TEXT NOT NULL,
+    action_type TEXT,
     details TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (lead_id) REFERENCES leads(id)
+    timestamp TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 )
 ```
 
 ### Processes Table
 ```sql
 CREATE TABLE processes (
-    id INTEGER PRIMARY KEY,
-    name TEXT NOT NULL,
-    status TEXT DEFAULT 'active',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT,
+    lead_id INTEGER,
+    channel TEXT,
+    last_action_id INTEGER,
+    next_followup_datetime TEXT,
+    status TEXT
 )
 ```
 
@@ -120,7 +144,7 @@ Content-Type: application/json
 {
     "email": "john@example.com",
     "name": "John Doe",
-    "status": "new"
+    "status": "new"  // Optional, defaults to "new"
 }
 ```
 
@@ -136,13 +160,18 @@ Content-Type: application/json
 
 {
     "name": "John Updated",
-    "status": "contacted"
+    "status": "contacted"  // Cannot be null
 }
 ```
 
 #### Delete Lead
 ```http
 DELETE /leads/{lead_id}
+```
+
+#### Search Leads
+```http
+GET /leads/?status=new&url=https://example.com
 ```
 
 ### Action Management
@@ -155,7 +184,8 @@ Content-Type: application/json
 {
     "lead_id": 1,
     "action_type": "email",
-    "details": "Sent welcome email"
+    "details": "Sent welcome email",  // Can also use "description" field
+    "timestamp": "2024-03-20 10:00:00"  // Optional, defaults to current time
 }
 ```
 
@@ -164,52 +194,21 @@ Content-Type: application/json
 GET /actions/{action_id}
 ```
 
-#### Update Action
+#### Search Actions
 ```http
-PUT /actions/{action_id}
-Content-Type: application/json
-
-{
-    "details": "Updated action details"
-}
-```
-
-#### Delete Action
-```http
-DELETE /actions/{action_id}
+GET /actions/?action_type=email
 ```
 
 ### Process Management
-
-#### Create Process
-```http
-POST /processes
-Content-Type: application/json
-
-{
-    "name": "Lead Nurturing",
-    "status": "active"
-}
-```
 
 #### Get Process
 ```http
 GET /processes/{process_id}
 ```
 
-#### Update Process
+#### Search Processes
 ```http
-PUT /processes/{process_id}
-Content-Type: application/json
-
-{
-    "status": "completed"
-}
-```
-
-#### Delete Process
-```http
-DELETE /processes/{process_id}
+GET /processes/?status=active
 ```
 
 ## API Response Formats
@@ -221,8 +220,9 @@ DELETE /processes/{process_id}
 {
     "id": 1,
     "name": "John Doe",
-    "email": "john@example.com",
-    "status": "new"
+    "email": "john@example.com",  // Always stored in lowercase
+    "status": "new",
+    "url": "https://example.com"
 }
 ```
 
@@ -233,13 +233,8 @@ DELETE /processes/{process_id}
         "id": 1,
         "name": "John Doe",
         "email": "john@example.com",
-        "status": "new"
-    },
-    {
-        "id": 2,
-        "name": "Jane Smith",
-        "email": "jane@example.com",
-        "status": "contacted"
+        "status": "new",
+        "url": "https://example.com"
     }
 ]
 ```
@@ -253,7 +248,8 @@ DELETE /processes/{process_id}
     "lead_id": 1,
     "action_type": "email",
     "details": "Sent welcome email",
-    "description": "Sent welcome email"  // For backward compatibility
+    "description": "Sent welcome email",  // For backward compatibility
+    "timestamp": "2024-03-20 10:00:00"
 }
 ```
 
@@ -265,14 +261,8 @@ DELETE /processes/{process_id}
         "lead_id": 1,
         "action_type": "email",
         "details": "Sent welcome email",
-        "description": "Sent welcome email"
-    },
-    {
-        "id": 2,
-        "lead_id": 1,
-        "action_type": "follow-up",
-        "details": "Sent follow-up email",
-        "description": "Sent follow-up email"
+        "description": "Sent welcome email",  // For backward compatibility
+        "timestamp": "2024-03-20 10:00:00"
     }
 ]
 ```
@@ -287,7 +277,7 @@ DELETE /processes/{process_id}
     "lead_id": 1,
     "channel": "email",
     "last_action_id": 1,
-    "next_followup_datetime": "2024-03-20 10:00:00",
+    "next_followup_datetime": "2024-03-27 10:00:00",
     "status": "active"
 }
 ```
@@ -301,17 +291,8 @@ DELETE /processes/{process_id}
         "lead_id": 1,
         "channel": "email",
         "last_action_id": 1,
-        "next_followup_datetime": "2024-03-20 10:00:00",
+        "next_followup_datetime": "2024-03-27 10:00:00",
         "status": "active"
-    },
-    {
-        "id": 2,
-        "name": "Follow-up Process",
-        "lead_id": 2,
-        "channel": "phone",
-        "last_action_id": 2,
-        "next_followup_datetime": "2024-03-21 14:00:00",
-        "status": "pending"
     }
 ]
 ```
@@ -319,7 +300,7 @@ DELETE /processes/{process_id}
 ### Error Response
 ```json
 {
-    "error": "Lead not found"
+    "detail": "Lead status cannot be None"
 }
 ```
 
@@ -329,8 +310,36 @@ The API uses standard HTTP status codes:
 
 - 200: Success
 - 201: Created
-- 400: Bad Request
+- 400: Bad Request (e.g., invalid status value, duplicate email)
 - 404: Not Found
+- 422: Unprocessable Entity (e.g., invalid email format)
 - 500: Internal Server Error
 
-Error responses include a JSON object with an `error` field containing the error message.
+Error responses include a JSON object with a `detail` field containing the error message. Common error messages include:
+
+- "Lead status cannot be None"
+- "A lead with this email already exists"
+- "Invalid email format"
+
+## Automatic Process Management
+
+The system automatically manages processes based on actions:
+
+1. When a new action is created:
+   - If no process exists for the lead, a new process is created
+   - If a process exists, it is updated with the new action details
+   - The next follow-up datetime is set to 7 days after the action's timestamp
+   - The process channel is updated to match the action type
+
+2. Process updates include:
+   - Last action ID
+   - Channel (based on action type)
+   - Next follow-up datetime
+   - Status tracking
+
+## Database Connection
+
+- Thread-safe SQLite operations
+- Automatic connection management
+- Debug logging for database operations
+- Connection pooling for concurrent requests
