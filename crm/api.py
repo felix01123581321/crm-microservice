@@ -6,8 +6,10 @@ import os
 
 def create_app():
     app = FastAPI(title="CRM API", description="REST API for CRM operations")
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    db_path = os.path.join(base_dir, "crm.db")
+    db_path = os.environ.get("DATABASE_URL")
+    if not db_path:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        db_path = os.path.join(base_dir, "crm.db")
     crm = CRM(db_path)
 
     # Lead endpoints
@@ -19,8 +21,8 @@ def create_app():
             raise HTTPException(status_code=400, detail="A lead with this email already exists")
         
         try:
-            lead_id = crm.create_lead(lead_data.dict())
-            return {**lead_data.dict(), "id": lead_id}
+            lead_id = crm.create_lead(lead_data.model_dump())
+            return {**lead_data.model_dump(), "id": lead_id}
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
@@ -45,7 +47,7 @@ def create_app():
                 raise HTTPException(status_code=400, detail="A lead with this email already exists")
 
         try:
-            crm.update_lead(lead_id, update_data.dict())
+            crm.update_lead(lead_id, update_data.model_dump())
             return crm.get_lead(lead_id)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
@@ -125,8 +127,8 @@ def create_app_with_db(db_path: str):
             raise HTTPException(status_code=400, detail="A lead with this email already exists")
         
         try:
-            lead_id = crm.create_lead(lead_data.dict())
-            return {**lead_data.dict(), "id": lead_id}
+            lead_id = crm.create_lead(lead_data.model_dump())
+            return {**lead_data.model_dump(), "id": lead_id}
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
@@ -151,7 +153,7 @@ def create_app_with_db(db_path: str):
                 raise HTTPException(status_code=400, detail="A lead with this email already exists")
 
         try:
-            crm.update_lead(lead_id, update_data.dict())
+            crm.update_lead(lead_id, update_data.model_dump())
             return crm.get_lead(lead_id)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
@@ -202,11 +204,6 @@ def create_app_with_db(db_path: str):
         return crm.search_actions(filters)
 
     # Process endpoints
-    @app.post("/processes/", response_model=Dict)
-    def create_process(process_data: Dict[str, Union[str, int, float]]):
-        process_id = crm.create_process(process_data)
-        return {"id": process_id, **process_data}
-
     @app.get("/processes/{process_id}", response_model=Dict)
     def get_process(process_id: int):
         process = crm.get_process(process_id)

@@ -21,15 +21,15 @@ RUN apt-get update && \
 RUN mkdir -p /app/data
 
 # Copy requirements first to leverage Docker cache
-COPY requirements.txt .
+COPY src/crm/requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir email-validator>=2.0.0
 
 # Copy application code
-COPY crm /app/crm
-COPY setup.py .
+COPY src/crm/crm /app/crm
+COPY src/crm/setup.py .
 
 # Create non-root user
 RUN useradd -m appuser && \

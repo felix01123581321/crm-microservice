@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, validator
+from pydantic import BaseModel, EmailStr, field_validator, ConfigDict
 from typing import Optional
 
 class LeadBase(BaseModel):
@@ -7,7 +7,8 @@ class LeadBase(BaseModel):
     status: str = "new"
     url: Optional[str] = None
 
-    @validator('email')
+    @field_validator('email')
+    @classmethod
     def email_must_be_lowercase(cls, v):
         return v.lower()
 
@@ -19,6 +20,4 @@ class LeadUpdate(LeadBase):
 
 class Lead(LeadBase):
     id: int
-
-    class Config:
-        orm_mode = True 
+    model_config = ConfigDict(from_attributes=True) 
